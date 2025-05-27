@@ -38,7 +38,6 @@ export const createRideRequest = async (rideData: Omit<RideRequest, 'id' | 'requ
   if (!currentUser) {
     throw new Error('You must be signed in to create a ride request');
   }
-  
   const ridesRef = ref(database, 'rideRequests');
   const newRideRef = push(ridesRef);
   
@@ -99,7 +98,6 @@ export const cancelRideRequest = async (rideId: string) => {
   
   return { success: true };
 };
-
 export const listenToRideRequest = (rideId: string, callback: (ride: RideRequest | null) => void) => {
   const rideRef = ref(database, `rideRequests/${rideId}`);
   const unsubscribe = onValue(rideRef, (snapshot) => {

@@ -976,6 +976,3 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
       </div>
     </div>
   );
-};
-
-export default DriverInterface;
