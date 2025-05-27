@@ -1,9 +1,9 @@
+/* Import responsive styles for mobile WebView compatibility */
+@import "./styles/responsiveStyles.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import responsive styles for mobile WebView compatibility */
-@import "./styles/responsiveStyles.css";
 
 @layer base {
   :root {

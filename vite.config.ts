@@ -15,15 +15,6 @@ export default defineConfig(({ mode }) => ({
     react({
       // Optimize JSX for mobile performance
       jsxImportSource: '@emotion/react',
-      babel: {
-        plugins: [
-          // Optional optimization for production builds
-          mode === 'production' && [
-            'transform-remove-console',
-            { exclude: ['error', 'warn'] }
-          ],
-        ].filter(Boolean),
-      },
     }),
     mode === 'development' &&
     componentTagger(),
@@ -53,7 +44,7 @@ export default defineConfig(({ mode }) => ({
           // Split vendor code to optimize caching
           vendor: ['react', 'react-dom', 'react-router-dom'],
           firebase: ['firebase/app', 'firebase/database', 'firebase/auth'],
-          ui: ['@/components/ui'],
+          // Removed UI chunk that was causing build errors
         },
       },
     },
