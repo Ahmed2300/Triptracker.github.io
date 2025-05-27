@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import responsive styles for mobile WebView compatibility */
+@import "./styles/responsiveStyles.css";
+
 @layer base {
   :root {
     --background: 0 0% 100%;

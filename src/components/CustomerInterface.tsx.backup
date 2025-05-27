@@ -607,10 +607,12 @@ const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                 </div>
               </div>
             )}
-            
-            {activeRide && activeRide.status !== 'completed' && activeRide.status !== 'cancelled' && (
-              <div className="py-3">
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm space-y-3">
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Trip progress status panel */}
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
                     <div className="flex items-center justify-between">
                       <h3 className="text-blue-800 font-medium flex items-center">
                         <Car className="w-4 h-4 mr-2" />

@@ -1,0 +1,129 @@
+/* 
+  Responsive styles for mobile compatibility
+  Particularly focused on Android WebView support
+*/
+
+/* Base mobile adjustments */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overscroll-behavior-y: none;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Fix input and form elements */
+input,
+select,
+textarea,
+button {
+  font-size: 16px !important; /* Prevents zoom on focus in iOS */
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* Increase touch targets */
+.btn,
+button,
+[role="button"],
+a.link,
+.card-header,
+.nav-item,
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Fix for map interactions on mobile */
+.map-container {
+  touch-action: pan-x pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* WebView specific fixes */
+@media screen and (max-width: 768px) {
+  /* Improved card layouts for smaller screens */
+  .card {
+    margin-bottom: 16px;
+  }
+  
+  /* Ensure padding for readable content */
+  .card-content {
+    padding: 12px;
+  }
+  
+  /* Stack horizontal elements on mobile */
+  .flex-row-on-desktop {
+    flex-direction: column;
+  }
+  
+  /* Make buttons full width on mobile */
+  .mobile-full-width {
+    width: 100%;
+  }
+  
+  /* Adjust headings for mobile */
+  h1, h2, h3 {
+    word-break: break-word;
+    hyphens: auto;
+  }
+  
+  /* Fix for modals on mobile */
+  .modal-content {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+}
+
+/* Android WebView specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* Fix for input fields in WebView */
+  input {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  /* Fix for scrolling issues */
+  .scroll-container {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Optimize loading experience */
+.loading-indicator {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+}
+
+/* Make shadows less resource intensive on mobile */
+.mobile-shadow {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Optimize animations for mobile */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
