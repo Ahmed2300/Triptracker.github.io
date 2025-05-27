@@ -619,54 +619,91 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 p-4">
-      <div className="max-w-md mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <h1 className="text-2xl font-bold">Driver</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
+      <div className="max-w-md mx-auto space-y-6 relative">
+        <div className="flex items-center justify-between gap-4 mb-2">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-blue-100 transition-colors" onClick={onBack}>
+              <ArrowLeft className="w-5 h-5 text-blue-700" />
+            </Button>
+            <h1 className="text-2xl font-bold text-blue-900">Driver</h1>
+          </div>
+          {isOnline ? (
+            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 flex items-center gap-1 px-3 py-1">
+              <Wifi className="w-3 h-3" />
+              Online
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300 flex items-center gap-1 px-3 py-1">
+              <WifiOff className="w-3 h-3" />
+              Offline
+            </Badge>
+          )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Card className="border-0 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 pb-3 pt-5">
+            <CardTitle className="flex items-center gap-2 text-white">
               <Navigation className="w-5 h-5" />
               Current Location
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4">
             {currentLocation ? (
-              <p className="text-sm text-gray-600">
-                Lat: {currentLocation.latitude.toFixed(6)}, Lng: {currentLocation.longitude.toFixed(6)}
-              </p>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-sm text-blue-800 font-medium">
+                  <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 px-2">
+                    Latitude
+                  </Badge>
+                  {currentLocation.latitude.toFixed(6)}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-800 font-medium">
+                  <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 px-2">
+                    Longitude
+                  </Badge>
+                  {currentLocation.longitude.toFixed(6)}
+                </div>
+              </div>
             ) : (
-              <p className="text-sm text-gray-500">Getting location...</p>
+              <div className="flex items-center justify-center py-2">
+                <div className="animate-pulse flex space-x-2 items-center">
+                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-75"></div>
+                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-150"></div>
+                  <p className="text-sm text-blue-600 ml-2">Getting location...</p>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
 
         {!isOnline && (
-          <Alert variant="destructive">
-            <WifiOff className="w-4 h-4" />
-            <AlertTitle>No Connection</AlertTitle>
-            <AlertDescription>
-              You're offline. Please check your internet connection.
-            </AlertDescription>
+          <Alert variant="destructive" className="bg-red-50 border border-red-200 animate-pulse">
+            <div className="flex items-start gap-3">
+              <div className="bg-red-100 p-2 rounded-full">
+                <WifiOff className="w-4 h-4 text-red-600" />
+              </div>
+              <div>
+                <AlertTitle className="text-red-800 font-bold">No Connection</AlertTitle>
+                <AlertDescription className="text-red-600">
+                  You're offline. Please check your internet connection to continue accepting rides.
+                </AlertDescription>
+              </div>
+            </div>
           </Alert>
         )}
 
-        <Tabs value={currentView} onValueChange={(value) => setCurrentView(value as DriverView)}>
-          <TabsList className="grid grid-cols-3 w-full">
-            <TabsTrigger value="available">
+        <Tabs value={currentView} onValueChange={(value) => setCurrentView(value as DriverView)} className="mt-2">
+          <TabsList className="grid grid-cols-3 w-full bg-blue-50 p-1 border border-blue-100 rounded-xl">
+            <TabsTrigger value="available" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
               <Filter className="w-4 h-4 mr-2" />
               Available
             </TabsTrigger>
-            <TabsTrigger value="active">
+            <TabsTrigger value="active" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
               <Compass className="w-4 h-4 mr-2" />
               Active
             </TabsTrigger>
-            <TabsTrigger value="history">
+            <TabsTrigger value="history" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm">
               <History className="w-4 h-4 mr-2" />
               History
             </TabsTrigger>
@@ -849,44 +886,81 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
               </Card>
             ) : activeRide ? (
               <div className="space-y-4">
-                <Card>
-                  <CardHeader>
+                <Card className="border-0 shadow-lg overflow-hidden">
+                  <CardHeader className="bg-gradient-to-r from-indigo-600 to-blue-500 pb-3 pt-5">
                     <CardTitle className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-white">
                         <span>Current Ride</span>
-                        <Badge variant={activeRide.status === 'started' ? 'default' : 'outline'}>
+                        <Badge variant={activeRide.status === 'started' ? 'default' : 'outline'} 
+                          className={activeRide.status === 'started' 
+                            ? 'bg-green-500 text-white border-none animate-pulse' 
+                            : 'bg-blue-100 text-blue-800 border-blue-200'}>
                           {activeRide.status === 'accepted' ? 'Accepted' : 'In Progress'}
                         </Badge>
                       </div>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Customer</h3>
-                        <span>{activeRide.customerName || 'Anonymous'}</span>
+                  <CardContent className="space-y-4 p-0">
+                    <div className="bg-white p-5 divide-y divide-blue-100">
+                      <div className="flex justify-between py-3 items-center">
+                        <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                          <div className="bg-blue-100 p-1 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                          </div>
+                          Customer
+                        </h3>
+                        <span className="font-semibold text-blue-700">{activeRide.customerName || 'Anonymous'}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Pickup</h3>
-                        <span>{activeRide.pickupLocationDescription}</span>
+                      <div className="flex justify-between py-3 items-center">
+                        <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                          <div className="bg-blue-100 p-1 rounded-full">
+                            <MapPin className="w-4 h-4 text-blue-600" />
+                          </div>
+                          Pickup
+                        </h3>
+                        <span className="text-blue-700 text-right max-w-[200px]">{activeRide.pickupLocationDescription}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Destination</h3>
-                        <span>{activeRide.destinationDescription}</span>
+                      <div className="flex justify-between py-3 items-center">
+                        <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                          <div className="bg-blue-100 p-1 rounded-full">
+                            <Route className="w-4 h-4 text-blue-600" />
+                          </div>
+                          Destination
+                        </h3>
+                        <span className="text-blue-700 text-right max-w-[200px]">{activeRide.destinationDescription}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <h3 className="font-medium">Fare</h3>
-                        <span>{formatPrice(activeRide.estimatedPrice || 0)}</span>
+                      <div className="flex justify-between py-3 items-center">
+                        <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                          <div className="bg-blue-100 p-1 rounded-full">
+                            <DollarSign className="w-4 h-4 text-blue-600" />
+                          </div>
+                          Fare
+                        </h3>
+                        <span className="font-bold text-green-600">{formatPrice(activeRide.estimatedPrice || 0)}</span>
                       </div>
                       {activeRide.status === 'started' && (
-                        <div className="flex justify-between">
-                          <h3 className="font-medium">Current Mileage</h3>
-                          <span>{mileage.toFixed(2)} miles</span>
+                        <div className="flex justify-between py-3 items-center">
+                          <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                            <div className="bg-blue-100 p-1 rounded-full">
+                              <Route className="w-4 h-4 text-blue-600" />
+                            </div>
+                            Current Mileage
+                          </h3>
+                          <span className="font-bold text-indigo-600 flex items-center">
+                            {mileage.toFixed(2)} 
+                            <span className="ml-1 text-sm font-normal text-indigo-500">miles</span>
+                          </span>
                         </div>
                       )}
                     </div>
                     
-                    <div className="h-64">
+                    <div className="h-[300px] relative overflow-hidden rounded-lg shadow-inner">
+                      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-white/80 to-transparent h-10 pointer-events-none"></div>
+                      <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-white/80 to-transparent h-10 pointer-events-none"></div>
+                      <div className="absolute top-2 left-2 z-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-1.5 text-xs font-medium text-blue-800 flex items-center gap-1.5">
+                        <Navigation className="w-3 h-3 text-blue-600" />
+                        {activeRide.status === 'accepted' ? 'Navigate to pickup' : 'Navigate to destination'}
+                      </div>
                       <DriverNavigationMap
                         currentLocation={currentLocation}
                         destination={activeRide.status === 'accepted' 
@@ -894,35 +968,57 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
                           : activeRide.destinationLocation}
                         isNavigatingToPickup={activeRide.status === 'accepted'}
                       />
+                      <div className="absolute bottom-2 right-2 z-20 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-1.5 text-xs font-medium text-blue-800">
+                        {activeRide.status === 'accepted' 
+                          ? 'ETA to pickup: 5 mins' 
+                          : 'ETA to destination: 12 mins'}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
                 
-                <div className="space-y-2">
+                <div className="space-y-3 mt-4">
                   {activeRide.status === 'accepted' && (
                     <>
-                      <Button onClick={startTrip} className="w-full" size="lg">
-                        <Play className="w-4 h-4 mr-2" />
-                        Start Trip
+                      <Button 
+                        onClick={startTrip} 
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-md hover:shadow-lg transition-all border-0 py-6" 
+                        size="lg"
+                      >
+                        <div className="bg-white/20 rounded-full p-1.5 mr-3">
+                          <Play className="w-5 h-5" />
+                        </div>
+                        <span className="font-bold text-base">Start Trip</span>
                       </Button>
                       
                       <Button 
                         onClick={cancelAcceptedTrip} 
                         variant="outline" 
-                        className="w-full" 
+                        className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 py-5" 
                         size="lg"
                         disabled={isCancelling}
                       >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        {isCancelling ? 'Cancelling...' : 'Cancel Ride'}
+                        <XCircle className="w-4 h-4 mr-2 opacity-80" />
+                        {isCancelling ? (
+                          <div className="flex items-center gap-2">
+                            <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full"></div>
+                            <span>Cancelling...</span>
+                          </div>
+                        ) : 'Cancel Ride'}
                       </Button>
                     </>
                   )}
                   
                   {activeRide.status === 'started' && (
-                    <Button onClick={endTrip} className="w-full" size="lg">
-                      <Square className="w-4 h-4 mr-2" />
-                      End Trip
+                    <Button 
+                      onClick={endTrip} 
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md hover:shadow-lg transition-all border-0 py-6" 
+                      size="lg"
+                    >
+                      <div className="bg-white/20 rounded-full p-1.5 mr-3">
+                        <Square className="w-5 h-5" />
+                      </div>
+                      <span className="font-bold text-base">End Trip</span>
                     </Button>
                   )}
                 </div>
