@@ -13,6 +13,8 @@ import { formatTravelTime } from "@/utils/distanceCalculator";
 import { formatPrice } from "@/utils/priceCalculator";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
+import { createRideUpdateNotificationForCustomer } from "@/services/notificationService";
 
 interface CustomerInterfaceProps {
   onBack: () => void;
@@ -159,28 +161,65 @@ const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
     if (!currentRideId) return;
 
     const unsubscribe = listenToRideRequest(currentRideId, (ride) => {
+      const previousStatus = activeRide?.status;
       setActiveRide(ride);
       
-      if (ride?.status === 'accepted') {
-        toast({
-          title: "Driver Found!",
-          description: "Your driver is on the way.",
-        });
-      } else if (ride?.status === 'started') {
-        toast({
-          title: "Trip Started",
-          description: "Your trip is now in progress.",
-        });
-      } else if (ride?.status === 'completed') {
-        toast({
-          title: "Trip Completed",
-          description: `Total distance: ${ride.calculatedMileage.toFixed(2)} miles`,
-        });
-      } else if (ride?.status === 'cancelled') {
-        toast({
-          title: "Ride Cancelled",
-          description: "Your ride request has been cancelled.",
-        });
+      // Only create notifications for status changes, not initial state
+      if (ride && previousStatus && previousStatus !== ride.status) {
+        if (ride.status === 'accepted') {
+          toast({
+            title: "Driver Found!",
+            description: "Your driver is on the way.",
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Driver Found!", 
+            `${ride.driverName || 'Your driver'} is on the way to pick you up.`,
+            "high"
+          );
+        } else if (ride.status === 'started') {
+          toast({
+            title: "Trip Started",
+            description: "Your trip is now in progress.",
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Trip Started", 
+            "Your trip is now in progress. Estimated price: " + 
+            formatPrice(ride.estimatedPrice || 0),
+            "medium"
+          );
+        } else if (ride.status === 'completed') {
+          toast({
+            title: "Trip Completed",
+            description: `Total distance: ${ride.calculatedMileage.toFixed(2)} miles`,
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Trip Completed", 
+            `Total distance: ${ride.calculatedMileage.toFixed(2)} miles. Thank you for riding with us!`,
+            "high"
+          );
+        } else if (ride.status === 'cancelled') {
+          toast({
+            title: "Ride Cancelled",
+            description: "Your ride request has been cancelled.",
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Ride Cancelled", 
+            "Your ride request has been cancelled.",
+            "medium"
+          );
+        }
       }
     });
 
@@ -489,14 +528,17 @@ const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
         {/* Enhanced Tracking Card with more detailed UI for active trips */}
         <Card className={`border-0 shadow-lg overflow-hidden ${activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? "ring-2 ring-blue-500" : ""}`}>
           <CardHeader className="bg-gradient-to-r from-indigo-600 to-blue-500 pb-3 pt-5">
-            <CardTitle className="flex items-center gap-2 text-white">
-              {activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? 
-                <Car className="w-5 h-5" /> : 
-                <Clock className="w-5 h-5" />}
-              {activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? 
-                "Trip Tracking" : 
-                "Ride Status"}
-            </CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center gap-2 text-white">
+                {activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? 
+                  <Car className="w-5 h-5" /> : 
+                  <Clock className="w-5 h-5" />}
+                {activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? 
+                  "Trip Tracking" : 
+                  "Ride Status"}
+              </CardTitle>
+              <NotificationCenter variant="ghost" />
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 p-0">
             <div className="bg-white p-5 divide-y divide-blue-100">

@@ -39,6 +39,8 @@ import { calculateDistance } from "@/utils/distanceCalculator";
 import { calculateEstimatedPrice, formatPrice } from "@/utils/priceCalculator";
 import RideRouteMap from "./RideRouteMap";
 import DriverNavigationMap from "./DriverNavigationMap";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
+import { createRideUpdateNotificationForDriver } from "@/services/notificationService";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnectivity } from "@/contexts/ConnectivityContext";
 import { isAndroidDevice, applyAndroidOptimizations } from "@/utils/deviceUtils";
@@ -410,19 +412,29 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
     if (ride.id) {
       try {
         // Update ride status in Firebase
-        await updateRideRequest(ride.id, {
+        const updatedRide = {
           ...ride,
-          status: 'accepted',
+          status: 'accepted' as const,
           driverId: currentUser.uid,
           driverName: currentUser.displayName || "Anonymous Driver",
           acceptTime: Date.now(),
           currentDriverLocation: currentLocation // Store initial driver location
-        });
+        };
+        
+        await updateRideRequest(ride.id, updatedRide);
         
         toast({
           title: "Ride Accepted",
           description: `You've accepted ${ride.customerName || 'customer'}'s ride request.`,
         });
+        
+        // Create a notification for the driver
+        createRideUpdateNotificationForDriver(
+          {...updatedRide, id: ride.id},
+          "Ride Accepted", 
+          `You've accepted a ride request from ${ride.customerName || 'a customer'}.\nPickup: ${ride.pickupAddress || 'Unknown location'}`,
+          "medium"
+        );
         
         // The active ride will be set by the listener
         setCurrentView('active');
@@ -475,17 +487,27 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
       setIsTracking(true);
       setMileage(activeRide.calculatedMileage || 0);
       
-      await updateRideRequest(activeRide.id, {
+      const updatedRide = {
         ...activeRide,
-        status: 'started',
+        status: 'started' as const,
         startTime: Date.now(),
         startTripLocation: currentLocation,
-      });
+      };
+      
+      await updateRideRequest(activeRide.id, updatedRide);
 
       toast({
         title: "Trip Started",
         description: "GPS tracking is now active. Drive safely!",
       });
+      
+      // Create a notification for the driver
+      createRideUpdateNotificationForDriver(
+        {...updatedRide, id: activeRide.id},
+        "Trip Started", 
+        `You've started the trip with ${activeRide.customerName || 'your customer'}. Drive safely!`,
+        "medium"
+      );
     } catch (error) {
       toast({
         title: "Error",
@@ -542,6 +564,14 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
       
       // Update Firebase
       await updateRideRequest(activeRide.id, completedRide);
+      
+      // Create a notification for the driver
+      createRideUpdateNotificationForDriver(
+        {...completedRide, id: activeRide.id},
+        "Trip Completed", 
+        `Trip completed successfully! Total distance: ${finalMileage.toFixed(2)} miles.\nThank you for driving with Trip Tracker.`,
+        "high"
+      );
 
       // Immediately update the UI without waiting for Firebase listener
       setActiveRide(null);
@@ -606,6 +636,14 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
           title: "Ride Cancelled",
           description: "The ride has been returned to the available rides list.",
         });
+        
+        // Create a notification for the driver
+        createRideUpdateNotificationForDriver(
+          {...activeRide, status: 'cancelled' as const},
+          "Ride Cancelled", 
+          `You've cancelled the ride with ${activeRide.customerName || 'a customer'}. The ride is now available for other drivers.`,
+          "medium"
+        );
       }
     } catch (error: any) {
       toast({
@@ -628,17 +666,20 @@ const DriverInterface = ({ onBack }: DriverInterfaceProps) => {
             </Button>
             <h1 className="text-2xl font-bold text-blue-900">Driver</h1>
           </div>
-          {isOnline ? (
-            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 flex items-center gap-1 px-3 py-1">
-              <Wifi className="w-3 h-3" />
-              Online
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300 flex items-center gap-1 px-3 py-1">
-              <WifiOff className="w-3 h-3" />
-              Offline
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            <NotificationCenter variant="ghost" />
+            {isOnline ? (
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 flex items-center gap-1 px-3 py-1">
+                <Wifi className="w-3 h-3" />
+                Online
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300 flex items-center gap-1 px-3 py-1">
+                <WifiOff className="w-3 h-3" />
+                Offline
+              </Badge>
+            )}
+          </div>
         </div>
 
         <Card className="border-0 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
