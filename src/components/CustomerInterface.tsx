@@ -1,0 +1,860 @@
+import { useState, useEffect, useContext } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ArrowLeft, MapPin, Clock, Car, DollarSign, X, AlertCircle, History, ChevronDown, ChevronUp, User, Timer, Route, Navigation, Wifi, WifiOff, Phone } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import CallButton from "./CallButton";
+import { useConnectivity } from "@/contexts/ConnectivityContext";
+import { isAndroidDevice, applyAndroidOptimizations } from "@/utils/deviceUtils";
+import DestinationInput from "./DestinationInput";
+import { createRideRequest, listenToRideRequest, cancelRideRequest, RideRequest, Location, checkCustomerHasActiveRide, listenToUserRides } from "@/services/firebaseService";
+import { formatTravelTime } from "@/utils/distanceCalculator";
+import { formatPrice } from "@/utils/priceCalculator";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
+import { createRideUpdateNotificationForCustomer } from "@/services/notificationService";
+
+interface CustomerInterfaceProps {
+  onBack: () => void;
+}
+
+const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
+  const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
+  const [selectedDestination, setSelectedDestination] = useState<{ location: Location; address: string } | null>(null);
+  const [activeRide, setActiveRide] = useState<RideRequest | null>(null);
+  const [currentRideId, setCurrentRideId] = useState<string | null>(null);
+  const [manualPrice, setManualPrice] = useState<string>("");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userRides, setUserRides] = useState<RideRequest[]>([]);
+  const [showPastRides, setShowPastRides] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isAndroid, setIsAndroid] = useState<boolean>(false);
+  const { toast } = useToast();
+  const { currentUser } = useAuth();
+  const { isOnline, hasLocationPermission, requestLocationPermission } = useConnectivity();
+
+  // Effect to detect Android device and apply optimizations
+  useEffect(() => {
+    const detectAndroid = async () => {
+      const isAndroidResult = isAndroidDevice();
+      setIsAndroid(isAndroidResult);
+      
+      if (isAndroidResult) {
+        // Apply Android-specific optimizations
+        await applyAndroidOptimizations();
+        
+        console.log('Android device detected, optimizations applied');
+        toast({
+          title: "Android Detected",
+          description: "App optimized for your Android device.",
+        });
+      }
+    };
+    
+    detectAndroid();
+  }, [toast]);
+  
+  // Effect to monitor connectivity status and permissions
+  useEffect(() => {
+    if (!isOnline) {
+      toast({
+        title: "Offline Mode",
+        description: "Some features may be limited until connection is restored.",
+        variant: "destructive",
+      });
+    }
+    
+    if (!hasLocationPermission) {
+      // Prompt for location permission if not granted
+      requestLocationPermission();
+    }
+  }, [isOnline, hasLocationPermission, requestLocationPermission, toast]);
+
+  // Effect to check for any active rides when the component mounts
+  useEffect(() => {
+    const checkForActiveRides = async () => {
+      try {
+        const existingRide = await checkCustomerHasActiveRide();
+        if (existingRide) {
+          // Focus on active ride by setting states
+          setActiveRide(existingRide);
+          setCurrentRideId(existingRide.id);
+          
+          // If ride is in progress, automatically update UI to focus on the trip
+          if (existingRide.status === 'accepted' || existingRide.status === 'started') {
+            // Clear destination selection if there's an active ride
+            setSelectedDestination(null);
+            
+            // Show toast notification with trip status
+            const statusText = existingRide.status === 'accepted' ? 'Driver is on the way' : 'Trip in progress';
+            toast({
+              title: "Active Trip Found",
+              description: statusText,
+              variant: "default",
+            });
+            
+            // If the ride has driver info, show additional notification
+            if (existingRide.driverName) {
+              setTimeout(() => {
+                toast({
+                  title: "Driver Information",
+                  description: `Your driver is ${existingRide.driverName}`,
+                  variant: "default",
+                });
+              }, 1500);
+            }
+          } else {
+            // For pending rides, just show basic notification
+            toast({
+              title: "Active Ride Found",
+              description: "You have an ongoing ride request.",
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error checking for active rides:", error);
+      }
+    };
+    
+    if (currentUser) {
+      checkForActiveRides();
+    }
+  }, [currentUser, toast]);
+
+  // Effect to listen to all user rides (active and past)
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const unsubscribe = listenToUserRides((rides) => {
+      setUserRides(rides);
+    });
+    
+    return unsubscribe;
+  }, [currentUser]);
+
+  useEffect(() => {
+    // Get current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        () => {
+          toast({
+            title: "Location Error",
+            description: "Could not get your current location. Please enable location services.",
+            variant: "destructive",
+          });
+        }
+      );
+    }
+  }, [toast]);
+
+  // Listen to active ride updates
+  useEffect(() => {
+    if (!currentRideId) return;
+
+    const unsubscribe = listenToRideRequest(currentRideId, (ride) => {
+      const previousStatus = activeRide?.status;
+      setActiveRide(ride);
+      
+      // Only create notifications for status changes, not initial state
+      if (ride && previousStatus && previousStatus !== ride.status) {
+        if (ride.status === 'accepted') {
+          toast({
+            title: "Driver Found!",
+            description: "Your driver is on the way.",
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Driver Found!", 
+            `${ride.driverName || 'Your driver'} is on the way to pick you up.`,
+            "high"
+          );
+        } else if (ride.status === 'started') {
+          toast({
+            title: "Trip Started",
+            description: "Your trip is now in progress.",
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Trip Started", 
+            "Your trip is now in progress. Estimated price: " + 
+            formatPrice(ride.estimatedPrice || 0),
+            "medium"
+          );
+        } else if (ride.status === 'completed') {
+          toast({
+            title: "Trip Completed",
+            description: `Total distance: ${ride.calculatedMileage.toFixed(2)} miles`,
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Trip Completed", 
+            `Total distance: ${ride.calculatedMileage.toFixed(2)} miles. Thank you for riding with us!`,
+            "high"
+          );
+        } else if (ride.status === 'cancelled') {
+          toast({
+            title: "Ride Cancelled",
+            description: "Your ride request has been cancelled.",
+          });
+          
+          // Create a notification
+          createRideUpdateNotificationForCustomer(
+            ride,
+            "Ride Cancelled", 
+            "Your ride request has been cancelled.",
+            "medium"
+          );
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [currentRideId, toast]);
+
+  const requestRide = async () => {
+    // Prevent multiple submissions
+    if (isSubmitting) return;
+    
+    // Check network connectivity
+    if (!isOnline) {
+      toast({
+        title: "No Internet Connection",
+        description: "You need an internet connection to request a ride. Please check your connection and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check location permissions
+    if (!hasLocationPermission) {
+      toast({
+        title: "Location Access Required",
+        description: "This app needs location access to find drivers near you.",
+        variant: "destructive",
+      });
+      
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        return;
+      }
+    }
+    
+    // Check if user already has an active ride
+    const existingRide = await checkCustomerHasActiveRide();
+    if (existingRide) {
+      toast({
+        title: "Active Ride Exists",
+        description: "You already have an active ride request. Please complete or cancel it before requesting a new one.",
+        variant: "destructive",
+      });
+      setActiveRide(existingRide);
+      setCurrentRideId(existingRide.id);
+      return;
+    }
+
+    if (!currentLocation) {
+      toast({
+        title: "Location Required",
+        description: "Please enable location services to request a ride.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedDestination) {
+      toast({
+        title: "Destination Required",
+        description: "Please select a destination for your ride.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!manualPrice || isNaN(parseFloat(manualPrice)) || parseFloat(manualPrice) <= 0) {
+      toast({
+        title: "Price Required",
+        description: "Please enter a valid price for your trip.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      // The createRideRequest function now automatically uses the current user's ID and name
+      const customerPrice = parseFloat(manualPrice);
+      
+      const rideId = await createRideRequest({
+        pickupLocation: currentLocation,
+        pickupAddress: "Current Location",
+        destinationLocation: selectedDestination.location,
+        destinationAddress: selectedDestination.address,
+        estimatedPrice: customerPrice,
+      });
+
+      if (rideId) {
+        setCurrentRideId(rideId);
+        toast({
+          title: "Ride Requested",
+          description: `Your offered price: ${formatPrice(customerPrice)}. Looking for nearby drivers...`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to request ride. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetRide = () => {
+    setActiveRide(null);
+    setCurrentRideId(null);
+    setSelectedDestination(null);
+    setManualPrice("");
+  };
+
+  // Function to cancel a ride request
+  const handleCancelRide = async () => {
+    if (!activeRide?.id || activeRide.status !== 'pending') return;
+    
+    setIsCancelling(true);
+    try {
+      const result = await cancelRideRequest(activeRide.id);
+      
+      if (result.success) {
+        toast({
+          title: "Ride Cancelled",
+          description: "Your ride request has been cancelled.",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel ride request.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const getStatusText = () => {
+    if (!activeRide) return 'Ready to request a ride';
+    
+    switch (activeRide.status) {
+      case 'pending':
+        return 'Looking for driver...';
+      case 'accepted':
+        return 'Driver en route';
+      case 'started':
+        return 'Trip in progress';
+      case 'completed':
+        return 'Trip completed';
+      case 'cancelled':
+        return 'Ride cancelled';
+      default:
+        return '';
+    }
+  };
+
+  const getStatusColor = (status?: string) => {
+    // If no status is provided, use the active ride's status
+    const rideStatus = status || activeRide?.status;
+    
+    if (!rideStatus) return 'secondary';
+    
+    switch (rideStatus) {
+      case 'pending':
+        return 'default';
+      case 'accepted':
+        return 'default';
+      case 'started':
+        return 'default';
+      case 'completed':
+        return 'default';
+      case 'cancelled':
+        return 'destructive';
+      default:
+        return 'secondary';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-6">
+      <div className="max-w-md mx-auto space-y-6 relative">
+        <div className="flex items-center justify-between gap-4 mb-2">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-blue-100 transition-colors" onClick={onBack}>
+              <ArrowLeft className="w-5 h-5 text-blue-700" />
+            </Button>
+            <h1 className="text-2xl font-bold text-blue-900">Customer</h1>
+          </div>
+          {isOnline ? (
+            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 flex items-center gap-1 px-3 py-1">
+              <Wifi className="w-3 h-3" />
+              Online
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300 flex items-center gap-1 px-3 py-1">
+              <WifiOff className="w-3 h-3" />
+              Offline
+            </Badge>
+          )}
+        </div>
+
+        <Card className="border-0 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 pb-3 pt-5">
+            <CardTitle className="flex items-center gap-2 text-white">
+              <MapPin className="w-5 h-5" />
+              Current Location
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            {currentLocation ? (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-sm text-blue-800 font-medium">
+                  <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 px-2">
+                    Latitude
+                  </Badge>
+                  {currentLocation.latitude.toFixed(6)}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-blue-800 font-medium">
+                  <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 px-2">
+                    Longitude
+                  </Badge>
+                  {currentLocation.longitude.toFixed(6)}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-2">
+                <div className="animate-pulse flex space-x-2 items-center">
+                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></div>
+                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-75"></div>
+                  <div className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-150"></div>
+                  <p className="text-sm text-blue-600 ml-2">Getting location...</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Only show destination selection when there's no active ride */}
+        {!activeRide && (
+          <Card className="border-0 shadow-md overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-indigo-600 to-blue-500 pb-3 pt-5">
+              <CardTitle className="text-white flex items-center gap-2">
+                <Route className="w-5 h-5" />
+                Select Destination
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-5">
+              <DestinationInput
+                onDestinationSelected={(location, address) => 
+                  setSelectedDestination({ location, address })
+                }
+                selectedDestination={selectedDestination}
+              />
+
+              {selectedDestination && (
+                <div className="space-y-5 mt-6">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <label htmlFor="price" className="block text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                      <div className="bg-blue-100 p-1 rounded-full">
+                        <DollarSign className="h-4 w-4 text-blue-600" />
+                      </div>
+                      Enter your price ($)
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <DollarSign className="h-4 w-4 text-blue-500" />
+                      </div>
+                      <Input
+                        id="price"
+                        type="number"
+                        placeholder="Enter your offer"
+                        value={manualPrice}
+                        onChange={(e) => setManualPrice(e.target.value)}
+                        className="pl-9 border-blue-200 focus:border-blue-400 focus:ring-blue-400"
+                        min="0.01"
+                        step="0.01"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-md hover:shadow-lg transition-all border-0 py-6"
+                    onClick={requestRide}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span className="font-bold">Requesting Ride...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="bg-white/20 rounded-full p-1.5">
+                          <Car className="w-5 h-5" />
+                        </div>
+                        <span className="font-bold text-base">Request Ride</span>
+                      </div>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Enhanced Tracking Card with more detailed UI for active trips */}
+        <Card className={`border-0 shadow-lg overflow-hidden ${activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? "ring-2 ring-blue-500" : ""}`}>
+          <CardHeader className="bg-gradient-to-r from-indigo-600 to-blue-500 pb-3 pt-5">
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center gap-2 text-white">
+                {activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? 
+                  <Car className="w-5 h-5" /> : 
+                  <Clock className="w-5 h-5" />}
+                {activeRide && (activeRide.status === 'started' || activeRide.status === 'accepted') ? 
+                  "Trip Tracking" : 
+                  "Ride Status"}
+              </CardTitle>
+              <NotificationCenter variant="ghost" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 p-0">
+            <div className="bg-white p-5 divide-y divide-blue-100">
+            <div className="flex justify-between py-3 items-center">
+              <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                <div className="bg-blue-100 p-1 rounded-full">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                </div>
+                Status
+              </h3>
+              <Badge variant={getStatusColor()} className="px-3 py-1 font-medium text-sm">{getStatusText()}</Badge>
+            </div>
+
+            {activeRide?.destinationAddress && (
+              <div className="flex justify-between py-3 items-center">
+                <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                  <div className="bg-blue-100 p-1 rounded-full">
+                    <MapPin className="w-4 h-4 text-blue-600" />
+                  </div>
+                  Destination
+                </h3>
+                <span className="text-blue-700 text-right max-w-[200px]">{activeRide.destinationAddress}</span>
+              </div>
+            )}
+
+            {activeRide?.estimatedPrice && (
+              <div className="flex justify-between py-3 items-center">
+                <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                  <div className="bg-blue-100 p-1 rounded-full">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                  </div>
+                  Estimated Cost
+                </h3>
+                <span className="font-bold text-green-600">{formatPrice(activeRide.estimatedPrice)}</span>
+              </div>
+            )}
+
+            {activeRide?.status === 'started' && (
+              <>
+                <div className="flex justify-between py-3 items-center">
+                  <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                    <div className="bg-blue-100 p-1 rounded-full">
+                      <Route className="w-4 h-4 text-blue-600" />
+                    </div>
+                    Distance
+                  </h3>
+                  <span className="font-bold text-indigo-600 flex items-center">
+                    {activeRide.calculatedMileage.toFixed(2)}
+                    <span className="ml-1 text-sm font-normal text-indigo-500">miles</span>
+                  </span>
+                </div>
+                <div className="flex justify-between py-3 items-center">
+                  <h3 className="font-medium text-blue-900 flex items-center gap-2">
+                    <div className="bg-blue-100 p-1 rounded-full">
+                      <DollarSign className="w-4 h-4 text-blue-600" />
+                    </div>
+                    Current Cost
+                  </h3>
+                  <span className="font-bold text-blue-600">
+                    {formatPrice(activeRide.estimatedPrice)}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {activeRide?.status === 'completed' && (
+              <div className="py-3">
+                <div className="p-5 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="bg-green-100 p-2 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    </div>
+                    <h3 className="font-bold text-lg text-green-800">Trip Completed!</h3>
+                  </div>
+                  <div className="space-y-2 pl-2">
+                    <p className="text-green-700 flex items-center gap-2">
+                      <Route className="w-4 h-4 text-green-600" />
+                      <span className="font-medium">Total distance:</span> 
+                      <span>{activeRide.calculatedMileage.toFixed(2)} miles</span>
+                    </p>
+                    <p className="text-green-700 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-green-600" />
+                      <span className="font-medium">Final cost:</span> 
+                      <span className="font-bold">{formatPrice(activeRide.estimatedPrice)}</span>
+                    </p>
+                    <p className="text-green-700 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-green-600" />
+                      <span className="font-medium">Destination:</span> 
+                      <span>{activeRide.destinationAddress}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeRide?.status === 'cancelled' && (
+              <div className="py-3">
+                <div className="p-5 bg-gradient-to-r from-red-50 to-pink-50 rounded-xl border border-red-200 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-red-100 p-2 rounded-full">
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg text-red-800">Ride Cancelled</h3>
+                      <p className="text-red-600 text-sm mt-1">This ride request has been cancelled.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {activeRide && activeRide.status !== 'completed' && activeRide.status !== 'cancelled' && (
+              <div className="py-3">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-blue-800 font-medium flex items-center">
+                        <Car className="w-4 h-4 mr-2" />
+                        {activeRide.status === 'accepted' ? 'Driver en route' : 'Trip in progress'}
+                      </h3>
+                      <Badge variant="default" className="bg-blue-500">
+                        {activeRide.status === 'accepted' ? 'On the way' : 'In transit'}
+                      </Badge>
+                    </div>
+                    
+                    {/* Driver information if available */}
+                    {activeRide.driverName && (
+                      <div className="flex items-center space-x-2 bg-white p-2 rounded-md border border-blue-100">
+                        <div className="bg-blue-100 rounded-full p-2">
+                          <User className="w-4 h-4 text-blue-700" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{activeRide.driverName}</p>
+                          <p className="text-xs text-gray-500">Your driver</p>
+                        </div>
+                        {activeRide.driverId && (
+                          <CallButton 
+                            userId={activeRide.driverId} 
+                            name={activeRide.driverName} 
+                            variant="outline"
+                            size="sm"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700"
+                          />
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Estimated time and distance to pickup - shown only when driver is en route */}
+                    {activeRide.status === 'accepted' && activeRide.estimatedTimeToPickup !== undefined && (
+                      <div className="bg-white p-3 rounded-md border border-blue-100 space-y-2">
+                        <h4 className="text-sm font-medium text-blue-800 flex items-center">
+                          <Clock className="w-3 h-3 mr-1" /> Driver ETA
+                        </h4>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-blue-50 p-2 rounded">
+                            <p className="text-xs text-gray-600">Estimated arrival:</p>
+                            <p className="font-bold text-blue-700">
+                              {formatTravelTime(activeRide.estimatedTimeToPickup)}
+                            </p>
+                          </div>
+                          
+                          <div className="bg-blue-50 p-2 rounded">
+                            <p className="text-xs text-gray-600">Distance away:</p>
+                            <p className="font-bold text-blue-700">
+                              {activeRide.estimatedDistanceToPickup?.toFixed(1) || '?'} miles
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {activeRide.lastDriverLocationUpdateTime && (
+                          <p className="text-xs text-gray-500 text-right">
+                            Updated {Math.floor((Date.now() - activeRide.lastDriverLocationUpdateTime) / 60000)} min ago
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Real-time trip tracking */}
+                    <div className="space-y-2">
+                      {activeRide.status === 'started' ? (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-blue-700 flex items-center">
+                            <Timer className="w-3 h-3 mr-1" /> Trip started at:
+                          </span>
+                          <span className="font-medium">
+                            {activeRide.startTime ? new Date(activeRide.startTime).toLocaleTimeString() : '--:--'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-blue-700 flex items-center">
+                            <Timer className="w-3 h-3 mr-1" /> Accepted at:
+                          </span>
+                          <span className="font-medium">
+                            {activeRide.acceptTime ? new Date(activeRide.acceptTime).toLocaleTimeString() : '--:--'}
+                          </span>
+                        </div>
+                      )}
+                      
+                      <div className="w-full bg-blue-100 rounded-full h-2 mt-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full" 
+                          style={{ width: activeRide.status === 'started' ? '75%' : '25%' }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Trip destination map placeholder - could be expanded with actual map integration */}
+                  <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-blue-600" />
+                      <h4 className="font-medium">Trip Route</h4>
+                    </div>
+                    <div className="flex items-center gap-2 mb-1 pl-6">
+                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                      <p className="text-sm">Pickup: Current Location</p>
+                    </div>
+                    <div className="flex items-center gap-2 pl-6">
+                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                      <p className="text-sm">Destination: {activeRide.destinationAddress}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeRide?.status === 'completed' && (
+                <Button onClick={resetRide} className="w-full" size="lg">
+                  Request Another Ride
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Ride History Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center gap-2">
+                <History className="w-5 h-5" />
+                Your Ride Requests
+              </CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 px-2" 
+                onClick={() => setShowPastRides(!showPastRides)}
+              >
+                {showPastRides ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </div>
+          </CardHeader>
+          {showPastRides && (
+            <CardContent>
+              {userRides.length === 0 ? (
+                <p className="text-center text-gray-500 py-4">No ride history found</p>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                  {userRides
+                    .sort((a, b) => b.requestTime - a.requestTime) // Sort by most recent first
+                    .map(ride => (
+                      <div 
+                        key={ride.id} 
+                        className={`border rounded-lg p-3 ${ride.status === 'pending' || ride.status === 'accepted' || ride.status === 'started' ? 'border-blue-200 bg-blue-50' : ''}`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {new Date(ride.requestTime).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {ride.destinationAddress}
+                            </p>
+                          </div>
+                          <Badge variant={getStatusColor(ride.status)}>
+                            {ride.status.charAt(0).toUpperCase() + ride.status.slice(1)}
+                          </Badge>
+                        </div>
+                        <div className="text-sm">
+                          <div className="flex justify-between">
+                            <span>Price:</span>
+                            <span className="font-medium">{formatPrice(ride.estimatedPrice || 0)}</span>
+                          </div>
+                          {ride.calculatedMileage > 0 && (
+                            <div className="flex justify-between">
+                              <span>Distance:</span>
+                              <span>{ride.calculatedMileage.toFixed(2)} miles</span>
+                            </div>
+                          )}
+                          {ride.status === 'pending' && currentRideId !== ride.id && (
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full mt-2"
+                              onClick={() => {
+                                setCurrentRideId(ride.id);
+                                setActiveRide(ride);
+                              }}
+                            >
+                              View Details
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+            </CardContent>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default CustomerInterface;
